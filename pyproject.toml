@@ -1,0 +1,53 @@
+[project]
+name = "agent-framework-goodmem"
+description = "GoodMem integration for Microsoft Agent Framework."
+authors = [{ name = "GoodMem", email = "support@goodmem.ai"}]
+readme = "README.md"
+requires-python = ">=3.10"
+version = "0.1.0"
+license-files = ["LICENSE"]
+urls.homepage = "https://github.com/bashareid/goodmem_agent-framework"
+urls.source = "https://github.com/bashareid/goodmem_agent-framework"
+urls.issues = "https://github.com/bashareid/goodmem_agent-framework/issues"
+classifiers = [
+  "License :: OSI Approved :: MIT License",
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Typing :: Typed",
+]
+dependencies = [
+    "agent-framework-core>=1.0.0rc4",
+    "httpx>=0.24.0,<1",
+    "pydantic>=2.0,<3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.23",
+    "pytest-timeout",
+    "build",
+    "twine",
+]
+
+[tool.pytest.ini_options]
+testpaths = ['tests']
+addopts = "-ra -q -r fEX"
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+filterwarnings = [
+    "ignore:Support for class-based `config` is deprecated:DeprecationWarning:pydantic.*"
+]
+timeout = 120
+markers = [
+    "integration: marks tests as integration tests that require external services",
+]
+
+[build-system]
+requires = ["flit-core >= 3.11,<4.0"]
+build-backend = "flit_core.buildapi"
