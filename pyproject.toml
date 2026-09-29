@@ -1,14 +1,14 @@
 [project]
-name = "agent-framework-goodmem"
+name = "goodmem-agent-framework"
 description = "GoodMem integration for Microsoft Agent Framework."
 authors = [{ name = "GoodMem", email = "support@goodmem.ai"}]
 readme = "README.md"
 requires-python = ">=3.10"
-version = "0.2.0"
+version = "0.3.0"
 license-files = ["LICENSE"]
-urls.homepage = "https://github.com/bashareid/goodmem_agent-framework"
-urls.source = "https://github.com/bashareid/goodmem_agent-framework"
-urls.issues = "https://github.com/bashareid/goodmem_agent-framework/issues"
+urls.homepage = "https://github.com/PAIR-Systems-Inc/goodmem_agent-framework"
+urls.source = "https://github.com/PAIR-Systems-Inc/goodmem_agent-framework"
+urls.issues = "https://github.com/PAIR-Systems-Inc/goodmem_agent-framework/issues"
 classifiers = [
   "License :: OSI Approved :: MIT License",
   "Development Status :: 4 - Beta",

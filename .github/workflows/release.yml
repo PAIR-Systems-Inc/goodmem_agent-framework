@@ -36,7 +36,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: pypi
-      url: https://pypi.org/p/agent-framework-goodmem
+      url: https://pypi.org/p/goodmem-agent-framework
     permissions:
       id-token: write
     steps:

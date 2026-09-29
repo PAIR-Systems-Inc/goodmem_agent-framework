@@ -23,7 +23,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from agent_framework_goodmem import GoodMemContextProvider, create_goodmem_tools
+from goodmem_agent_framework import GoodMemContextProvider, create_goodmem_tools
 
 from ._fakes import EMBEDDER_A, LLM_ID, RERANKER_ID, FakeGoodMem, load_stream
 
@@ -228,7 +228,7 @@ async def test_context_provider_warns_on_partial_and_keeps_chunks(fake: FakeGood
         extend_messages=lambda source, messages: added.extend(messages),
     )
     try:
-        with caplog.at_level(logging.WARNING, logger="agent_framework_goodmem._context_provider"):
+        with caplog.at_level(logging.WARNING, logger="goodmem_agent_framework._context_provider"):
             await provider.before_run(agent=None, session=None, context=context, state={})
     finally:
         await client.close()

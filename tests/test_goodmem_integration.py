@@ -1,6 +1,6 @@
 # Copyright (c) Microsoft. All rights reserved.
 
-"""Integration tests for the standalone agent-framework-goodmem package.
+"""Integration tests for the standalone goodmem-agent-framework package.
 
 These tests hit a live GoodMem server and exercise both the low-level
 ``GoodMemClient`` and the high-level ``create_goodmem_tools`` factory across
@@ -28,7 +28,7 @@ import pytest_asyncio
 
 # Allow direct import without installing the package
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from agent_framework_goodmem import (  # noqa: E402
+from goodmem_agent_framework import (  # noqa: E402
     GoodMemClient,
     create_goodmem_tools,
 )

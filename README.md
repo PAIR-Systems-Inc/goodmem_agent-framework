@@ -1,4 +1,4 @@
-# agent-framework-goodmem
+# goodmem-agent-framework
 
 [GoodMem](https://goodmem.ai) integration for the
 [Microsoft Agent Framework](https://github.com/microsoft/agent-framework).
@@ -16,7 +16,7 @@ backed by a GoodMem server. It exposes:
 ## Installation
 
 ```bash
-pip install agent-framework-goodmem
+pip install goodmem-agent-framework
 ```
 
 For local development:
@@ -29,7 +29,7 @@ pip install -e .
 
 ```python
 import asyncio
-from agent_framework_goodmem import GoodMemClient, create_goodmem_tools
+from goodmem_agent_framework import GoodMemClient, create_goodmem_tools
 
 async def main():
     client = GoodMemClient(
@@ -167,7 +167,7 @@ already exists`, and the tools pass that text on in `error`.
 ```python
 from agent_framework import Agent
 from agent_framework.openai import OpenAIChatClient
-from agent_framework_goodmem import GoodMemClient, GoodMemContextProvider
+from goodmem_agent_framework import GoodMemClient, GoodMemContextProvider
 
 client = GoodMemClient(base_url="https://localhost:8080", api_key="gm_...", verify_ssl=False)
 

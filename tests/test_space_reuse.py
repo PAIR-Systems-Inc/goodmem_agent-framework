@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import json
 
-from agent_framework_goodmem import create_goodmem_tools
+from goodmem_agent_framework import create_goodmem_tools
 
 from ._fakes import EMBEDDER_A, EMBEDDER_B, FakeGoodMem
 

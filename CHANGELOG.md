@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.0
+
+### Changed
+
+- **Renamed to `goodmem-agent-framework` (import `goodmem_agent_framework`),**
+  the goodmem-<framework> naming used by goodmem-adk and
+  goodmem-semantic-kernel. Breaking: update imports from
+  `agent_framework_goodmem` to `goodmem_agent_framework`.
+
 ## 0.2.0
 
 ### Changed (behaviour)
