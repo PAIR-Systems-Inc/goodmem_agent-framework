@@ -1,6 +1,6 @@
 # Copyright (c) Microsoft. All rights reserved.
 
-"""Integration tests for the standalone agent-framework-goodmem package.
+"""Integration tests for the standalone goodmem-agent-framework package.
 
 These tests hit a live GoodMem server and exercise both the low-level
 ``GoodMemClient`` and the high-level ``create_goodmem_tools`` factory across

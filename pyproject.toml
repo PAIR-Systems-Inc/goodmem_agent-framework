@@ -1,14 +1,14 @@
 [project]
-name = "agent-framework-goodmem"
+name = "goodmem-agent-framework"
 description = "GoodMem integration for Microsoft Agent Framework."
 authors = [{ name = "GoodMem", email = "support@goodmem.ai"}]
 readme = "README.md"
 requires-python = ">=3.10"
-version = "0.2.0"
+version = "0.2.1"
 license-files = ["LICENSE"]
-urls.homepage = "https://github.com/bashareid/goodmem_agent-framework"
-urls.source = "https://github.com/bashareid/goodmem_agent-framework"
-urls.issues = "https://github.com/bashareid/goodmem_agent-framework/issues"
+urls.homepage = "https://github.com/PAIR-Systems-Inc/goodmem_agent-framework"
+urls.source = "https://github.com/PAIR-Systems-Inc/goodmem_agent-framework"
+urls.issues = "https://github.com/PAIR-Systems-Inc/goodmem_agent-framework/issues"
 classifiers = [
   "License :: OSI Approved :: MIT License",
   "Development Status :: 4 - Beta",
@@ -47,6 +47,11 @@ timeout = 120
 markers = [
     "integration: marks tests as integration tests that require external services",
 ]
+
+# The distribution name no longer matches the import package, so flit must be
+# told which module to package.
+[tool.flit.module]
+name = "agent_framework_goodmem"
 
 [build-system]
 requires = ["flit-core >= 3.11,<4.0"]

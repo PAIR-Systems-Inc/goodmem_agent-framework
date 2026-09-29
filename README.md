@@ -1,4 +1,4 @@
-# agent-framework-goodmem
+# goodmem-agent-framework
 
 [GoodMem](https://goodmem.ai) integration for the
 [Microsoft Agent Framework](https://github.com/microsoft/agent-framework).
@@ -13,10 +13,22 @@ backed by a GoodMem server. It exposes:
 - **`create_goodmem_tools`** — a factory that returns ready-to-use function
   tools so the model itself can manage spaces and memories.
 
+> **Renamed on PyPI.** This package was previously published as
+> `agent-framework-goodmem` (last version on that name: 0.2.0). It moved into
+> the PAIR Systems PyPI organisation under the `goodmem-<framework>` naming
+> used by goodmem-adk and goodmem-semantic-kernel. The import name is
+> unchanged: `import agent_framework_goodmem` keeps working. Both
+> distributions ship the same `agent_framework_goodmem` package, so remove the
+> old one first or they overwrite each other's files:
+>
+> ```bash
+> pip uninstall -y agent-framework-goodmem && pip install goodmem-agent-framework
+> ```
+
 ## Installation
 
 ```bash
-pip install agent-framework-goodmem
+pip install goodmem-agent-framework
 ```
 
 For local development:

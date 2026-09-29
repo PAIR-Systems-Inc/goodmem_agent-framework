@@ -32,8 +32,10 @@ else:
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
+# The distribution name (goodmem-agent-framework) differs from the import
+# package name, so the version is looked up by distribution name.
 try:
-    __version__ = importlib.metadata.version(__name__)
+    __version__ = importlib.metadata.version("goodmem-agent-framework")
 except importlib.metadata.PackageNotFoundError:
     __version__ = "0.0.0"  # Fallback for development mode
 
