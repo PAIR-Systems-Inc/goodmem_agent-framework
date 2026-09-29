@@ -1,0 +1,4 @@
+{"status":{"code":"NOT_FOUND","message":"LLM validation failed: Exception: LLM not found: 00000000-0000-0000-0000-000000000000 (ID: 00000000-0000-0000-0000-000000000000). Verify the LLM exists and is accessible.","details":{"llm_id":"00000000-0000-0000-0000-000000000000"}}}
+{"resultSetBoundary":{"resultSetId":"01a0ee11-f154-714b-ab5c-7dd487988461","kind":"BEGIN","stageName":"retrieve"}}
+{"resultSetBoundary":{"resultSetId":"01a0ee11-f154-714b-ab5c-7dd487988461","kind":"END","stageName":""}}
+{"status":{"code":"SUMMARIZATION_FAILED","message":"Failed to create LLM inference client: Exception: LLM not found: 00000000-0000-0000-0000-000000000000","details":{"llm_id":"00000000-0000-0000-0000-000000000000"}}}

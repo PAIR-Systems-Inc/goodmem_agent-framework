@@ -131,6 +131,10 @@ class GoodMemContextProvider(_BaseContextProvider):
             logger.warning("GoodMem retrieval returned unsuccessful: %s", result.get("error"))
             return
 
+        if result.get("partial"):
+            # The server reported a problem; any chunks it still returned are used.
+            logger.warning("GoodMem retrieval was partial: %s", result.get("statuses"))
+
         chunks = result.get("results", [])
         if not chunks:
             return
@@ -142,7 +146,8 @@ class GoodMemContextProvider(_BaseContextProvider):
         memory_text = "\n".join(memory_lines)
         context.extend_messages(
             self,
-            [Message(role="user", text=f"{self.context_prompt}\n{memory_text}")],
+            # ``Message(text=...)`` was removed in agent-framework-core 1.0.0; ``contents`` works in every release.
+            [Message(role="user", contents=[f"{self.context_prompt}\n{memory_text}"])],
         )
 
     async def after_run(
