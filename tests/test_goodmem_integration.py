@@ -28,7 +28,7 @@ import pytest_asyncio
 
 # Allow direct import without installing the package
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from agent_framework_goodmem import (  # noqa: E402
+from goodmem_agent_framework import (  # noqa: E402
     GoodMemClient,
     create_goodmem_tools,
 )

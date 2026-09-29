@@ -1,20 +1,13 @@
 # Changelog
 
-## 0.2.1
+## 0.3.0
 
 ### Changed
 
-- **The distribution is renamed from `agent-framework-goodmem` to
-  `goodmem-agent-framework`.** It moved into the PAIR Systems PyPI
-  organisation under the `goodmem-<framework>` naming used by goodmem-adk and
-  goodmem-semantic-kernel. Install it with `pip install goodmem-agent-framework`.
-  The import package is unchanged (`import agent_framework_goodmem`), and
-  the API and behaviour are the same as 0.2.0. `agent-framework-goodmem`
-  stays at 0.2.0. Both distributions ship the same `agent_framework_goodmem`
-  package, so uninstall the old one first:
-  `pip uninstall -y agent-framework-goodmem && pip install goodmem-agent-framework`.
-- `__version__` is looked up by the new distribution name (looking it up by
-  the import name would find no installed distribution and report `0.0.0`).
+- **Renamed to `goodmem-agent-framework` (import `goodmem_agent_framework`),**
+  the goodmem-<framework> naming used by goodmem-adk and
+  goodmem-semantic-kernel. Breaking: update imports from
+  `agent_framework_goodmem` to `goodmem_agent_framework`.
 
 ## 0.2.0
 

@@ -13,18 +13,6 @@ backed by a GoodMem server. It exposes:
 - **`create_goodmem_tools`** — a factory that returns ready-to-use function
   tools so the model itself can manage spaces and memories.
 
-> **Renamed on PyPI.** This package was previously published as
-> `agent-framework-goodmem` (last version on that name: 0.2.0). It moved into
-> the PAIR Systems PyPI organisation under the `goodmem-<framework>` naming
-> used by goodmem-adk and goodmem-semantic-kernel. The import name is
-> unchanged: `import agent_framework_goodmem` keeps working. Both
-> distributions ship the same `agent_framework_goodmem` package, so remove the
-> old one first or they overwrite each other's files:
->
-> ```bash
-> pip uninstall -y agent-framework-goodmem && pip install goodmem-agent-framework
-> ```
-
 ## Installation
 
 ```bash
@@ -41,7 +29,7 @@ pip install -e .
 
 ```python
 import asyncio
-from agent_framework_goodmem import GoodMemClient, create_goodmem_tools
+from goodmem_agent_framework import GoodMemClient, create_goodmem_tools
 
 async def main():
     client = GoodMemClient(
@@ -179,7 +167,7 @@ already exists`, and the tools pass that text on in `error`.
 ```python
 from agent_framework import Agent
 from agent_framework.openai import OpenAIChatClient
-from agent_framework_goodmem import GoodMemClient, GoodMemContextProvider
+from goodmem_agent_framework import GoodMemClient, GoodMemContextProvider
 
 client = GoodMemClient(base_url="https://localhost:8080", api_key="gm_...", verify_ssl=False)
 

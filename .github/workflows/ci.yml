@@ -33,8 +33,8 @@ jobs:
       # compiles and that the public API imports.
       - name: Compile and import
         run: |
-          python -m compileall -q agent_framework_goodmem tests
-          python -c "from agent_framework_goodmem import GoodMemClient, GoodMemContextProvider, create_goodmem_tools, __version__; print(__version__)"
+          python -m compileall -q goodmem_agent_framework tests
+          python -c "from goodmem_agent_framework import GoodMemClient, GoodMemContextProvider, create_goodmem_tools, __version__; print(__version__)"
 
       # Matches a real key (the prefix plus 26 alphanumerics); written as g[m]_
       # so the literal prefix never appears in the repository's own key scans.

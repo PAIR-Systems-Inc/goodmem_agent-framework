@@ -18,7 +18,7 @@ from typing import Any
 
 import httpx
 
-from agent_framework_goodmem import GoodMemClient
+from goodmem_agent_framework import GoodMemClient
 
 FIXTURES = pathlib.Path(__file__).parent / "fixtures"
 
