@@ -47,6 +47,133 @@ def _guess_mime(extension: str) -> str:
     return _MIME_TYPES.get(extension.lower().lstrip("."), "application/octet-stream")
 
 
+# -- Error helpers -------------------------------------------------------------
+
+
+def _server_error_detail(resp: httpx.Response) -> str:
+    """Extract the server's own error message from an error response body."""
+    try:
+        body = resp.json()
+    except ValueError:
+        return resp.text.strip()[:500]
+    if isinstance(body, dict):
+        if isinstance(body.get("error"), str):
+            return body["error"]
+        if isinstance(body.get("message"), str):
+            return body["message"]
+        errors = body.get("errors")
+        if isinstance(errors, list):
+            parts = []
+            for err in errors:
+                if isinstance(err, dict):
+                    field = err.get("field")
+                    message = err.get("message", "")
+                    parts.append(f"{field}: {message}" if field else str(message))
+                else:
+                    parts.append(str(err))
+            return "; ".join(parts)
+    return json.dumps(body)[:500]
+
+
+def _raise_for_status(resp: httpx.Response) -> None:
+    """Like ``resp.raise_for_status()``, but keep the server's error body.
+
+    The raised ``httpx.HTTPStatusError`` carries the server's own message
+    (e.g. ``A space with this name already exists``) so it reaches the caller
+    instead of only the status line.
+    """
+    if resp.is_success:
+        return
+    request = resp.request
+    detail = _server_error_detail(resp)
+    message = f"HTTP {resp.status_code} {resp.reason_phrase} for {request.method} {request.url.path}"
+    if detail:
+        message += f": {detail}"
+    raise httpx.HTTPStatusError(message, request=request, response=resp)
+
+
+# -- Retrieval status helpers --------------------------------------------------
+
+# Informational notices that never mean something the caller asked for is
+# missing: FEATURE_DISABLED reports an optional feature the caller did not
+# configure, LLM_CAPABILITY_INFERRED a capability the server worked out on its
+# own. Decided by code alone (retrieval status contract, Q1).
+_INFORMATIONAL_STATUS_CODES = frozenset({"FEATURE_DISABLED", "LLM_CAPABILITY_INFERRED"})
+
+# Status codes this package recognizes.  Anything else is reported as
+# ``UNKNOWN`` with the server's code kept in ``originalCode`` (Q3).
+_KNOWN_STATUS_CODES = frozenset({
+    "GOODMEM_STATUS_CODE_UNSPECIFIED",
+    "INVALID_ARGUMENT",
+    "NOT_FOUND",
+    "PERMISSION_DENIED",
+    "FAILED_PRECONDITION",
+    "EMBEDDER_FAILED",
+    "EMBEDDER_UNAVAILABLE",
+    "EMBEDDER_TIMEOUT",
+    "VECTOR_SEARCH_FAILED",
+    "VECTOR_SEARCH_PARTIAL",
+    "VECTOR_SEARCH_TIMEOUT",
+    "SPACE_INACCESSIBLE",
+    "SPACE_NOT_FOUND",
+    "SPACE_NO_EMBEDDERS",
+    "CHUNK_NOT_FOUND",
+    "MEMORY_LOAD_FAILED",
+    "MEMORY_CONTENT_UNAVAILABLE",
+    "RERANKING_FAILED",
+    "SUMMARIZATION_FAILED",
+    "SUMMARIZATION_TIMEOUT",
+    "RATE_LIMITED",
+    "RESOURCE_EXHAUSTED",
+    "CONFIGURATION_ERROR",
+}) | _INFORMATIONAL_STATUS_CODES
+
+
+def _normalize_status(raw: Any) -> dict[str, Any] | None:
+    """Turn one ``status`` event into ``{code, message, details}``.
+
+    Returns ``None`` for informational notices (Q1).  A code this package does
+    not recognize is reported as ``UNKNOWN`` and never dropped (Q3).
+    """
+    if not isinstance(raw, dict):
+        raw = {"message": str(raw)}
+    code = raw.get("code")
+    known = isinstance(code, str) and code in _KNOWN_STATUS_CODES
+    if known and code in _INFORMATIONAL_STATUS_CODES:
+        return None
+    details = raw.get("details")
+    status: dict[str, Any] = {
+        "code": code,
+        "message": str(raw.get("message") or ""),
+        "details": details if isinstance(details, dict) else {},
+    }
+    if not known:
+        status["code"] = "UNKNOWN"
+        status["originalCode"] = code
+    return status
+
+
+def _is_reranker_failure(status: dict[str, Any]) -> bool:
+    """True when *status* says the requested reranker was not applied."""
+    if status["code"] == "RERANKING_FAILED":
+        return True
+    if status["code"] != "NOT_FOUND":
+        return False
+    # A missing reranker arrives as NOT_FOUND naming the reranker; a NOT_FOUND
+    # about anything else (an LLM, a space) says nothing about the ranking.
+    return "reranker_id" in status["details"] or "reranker" in status["message"].lower()
+
+
+def _describe_statuses(statuses: list[dict[str, Any]]) -> str:
+    """Render statuses as ``CODE: message; CODE: message``."""
+    return "; ".join(f"{s['code']}: {s['message']}" if s["message"] else s["code"] for s in statuses)
+
+
+def _space_embedder_ids(space: dict[str, Any]) -> list[str]:
+    """Return the embedder IDs a space was created with."""
+    return [e["embedderId"] for e in space.get("spaceEmbedders") or [] if isinstance(e, dict) and e.get("embedderId")]
+
+
 class GoodMemClient:
     """Async client for the GoodMem REST API.
 
@@ -78,32 +205,104 @@ class GoodMemClient:
     async def list_spaces(self) -> list[dict[str, Any]]:
         """List all spaces."""
         resp = await self._http.get("/v1/spaces")
-        resp.raise_for_status()
+        _raise_for_status(resp)
         body = resp.json()
         return body if isinstance(body, list) else body.get("spaces", [])
+
+    async def _find_spaces_by_name(self, name: str) -> list[dict[str, Any]]:
+        """Return every space named exactly *name*, reading all pages.
+
+        The server's ``name_filter`` is a case-insensitive glob, not an exact
+        match, so the exact name is re-checked here.  A name containing glob
+        characters is not sent as a filter at all (it might not match itself).
+        """
+        params: dict[str, Any] = {}
+        if not any(ch in name for ch in "*?[]\\"):
+            params["name_filter"] = name
+        matches: list[dict[str, Any]] = []
+        seen_tokens: set[str] = set()
+        while True:
+            resp = await self._http.get("/v1/spaces", params=params)
+            _raise_for_status(resp)
+            body = resp.json()
+            spaces = body if isinstance(body, list) else body.get("spaces", [])
+            matches.extend(s for s in spaces if s.get("name") == name)
+            next_token = body.get("nextToken") if isinstance(body, dict) else None
+            if not next_token or next_token in seen_tokens:
+                return matches
+            seen_tokens.add(next_token)
+            params["nextToken"] = next_token
 
     async def create_space(
         self,
         name: str,
-        embedder_id: str,
+        embedder_id: str | None,
         chunk_size: int = 256,
         chunk_overlap: int = 25,
         keep_strategy: str = "KEEP_END",
         length_measurement: str = "CHARACTER_COUNT",
     ) -> dict[str, Any]:
-        """Create a new space, or return the existing one if a space with *name* already exists."""
-        # Check for existing space with the same name
-        spaces = await self.list_spaces()
-        for space in spaces:
-            if space.get("name") == name:
+        """Create a new space, or reuse the existing space named *name*.
+
+        An existing space is reused only when its embedder is *embedder_id*
+        (or when *embedder_id* is ``None``, meaning no particular embedder was
+        requested).  If the existing space uses a different embedder, or more
+        than one space has this name, nothing is created and a result with
+        ``success: False`` explains the conflict.  When *embedder_id* is
+        ``None`` and a new space is needed, the first embedder on the server
+        is used.
+        """
+        embedder_id = embedder_id or None
+        existing = await self._find_spaces_by_name(name)
+        if len(existing) > 1:
+            listing = ", ".join(
+                f"{s.get('spaceId')} (embedders: {', '.join(_space_embedder_ids(s)) or 'none'})" for s in existing
+            )
+            return {
+                "success": False,
+                "error": (
+                    f"{len(existing)} spaces are named '{name}': {listing}. Cannot tell which one to reuse; "
+                    "nothing was created. Use a different name or pick a space by ID."
+                ),
+                "existingSpaceIds": [s.get("spaceId") for s in existing],
+            }
+        if existing:
+            space = existing[0]
+            space_embedders = _space_embedder_ids(space)
+            if embedder_id is not None and space_embedders != [embedder_id]:
                 return {
-                    "success": True,
-                    "spaceId": space["spaceId"],
-                    "name": space["name"],
-                    "embedderId": embedder_id,
-                    "message": "Space already exists, reusing existing space",
-                    "reused": True,
+                    "success": False,
+                    "error": (
+                        f"A space named '{name}' already exists (spaceId {space.get('spaceId')}) with embedder "
+                        f"{', '.join(space_embedders) or 'none'}, but embedder {embedder_id} was requested. "
+                        "Reusing it would silently embed with a different model than requested, so nothing was created. "
+                        "Use a different name, or pass the existing space's embedder to reuse it."
+                    ),
+                    "existingSpaceId": space.get("spaceId"),
+                    "existingEmbedderIds": space_embedders,
+                    "requestedEmbedderId": embedder_id,
                 }
+            return {
+                "success": True,
+                "spaceId": space["spaceId"],
+                "name": space["name"],
+                "embedderId": space_embedders[0] if len(space_embedders) == 1 else None,
+                "embedderIds": space_embedders,
+                "chunkingConfig": space.get("defaultChunkingConfig"),
+                "message": (
+                    "Space already exists, reusing existing space"
+                    if embedder_id is None
+                    else "Space already exists with the same embedder, reusing existing space"
+                ),
+                "reused": True,
+            }
+
+        if embedder_id is None:
+            embedders = await self.list_embedders()
+            if embedders:
+                embedder_id = embedders[0].get("embedderId") or embedders[0].get("id") or None
+            if not embedder_id:
+                return {"success": False, "error": "No embedder_id provided and no embedders available on the server."}
 
         payload: dict[str, Any] = {
             "name": name,
@@ -120,13 +319,14 @@ class GoodMemClient:
             },
         }
         resp = await self._http.post("/v1/spaces", json=payload)
-        resp.raise_for_status()
+        _raise_for_status(resp)
         data = resp.json()
         return {
             "success": True,
             "spaceId": data["spaceId"],
             "name": data["name"],
             "embedderId": embedder_id,
+            "embedderIds": _space_embedder_ids(data) or [embedder_id],
             "chunkingConfig": payload["defaultChunkingConfig"],
             "message": "Space created successfully",
             "reused": False,
@@ -135,7 +335,7 @@ class GoodMemClient:
     async def get_space(self, space_id: str) -> dict[str, Any]:
         """Fetch a single space by ID."""
         resp = await self._http.get(f"/v1/spaces/{space_id}")
-        resp.raise_for_status()
+        _raise_for_status(resp)
         return {"success": True, "space": resp.json()}
 
     async def update_space(
@@ -165,7 +365,7 @@ class GoodMemClient:
             return {"success": False, "error": "No fields provided to update."}
 
         resp = await self._http.put(f"/v1/spaces/{space_id}", json=payload)
-        resp.raise_for_status()
+        _raise_for_status(resp)
         return {
             "success": True,
             "spaceId": space_id,
@@ -176,7 +376,7 @@ class GoodMemClient:
     async def delete_space(self, space_id: str) -> dict[str, Any]:
         """Delete a space by ID."""
         resp = await self._http.delete(f"/v1/spaces/{space_id}")
-        resp.raise_for_status()
+        _raise_for_status(resp)
         return {"success": True, "spaceId": space_id, "message": "Space deleted successfully"}
 
     # -- Embedders -------------------------------------------------------------
@@ -184,7 +384,7 @@ class GoodMemClient:
     async def list_embedders(self) -> list[dict[str, Any]]:
         """List available embedder models."""
         resp = await self._http.get("/v1/embedders")
-        resp.raise_for_status()
+        _raise_for_status(resp)
         body = resp.json()
         return body if isinstance(body, list) else body.get("embedders", [])
 
@@ -205,7 +405,7 @@ class GoodMemClient:
             params["nextToken"] = next_token
 
         resp = await self._http.get(f"/v1/spaces/{space_id}/memories", params=params)
-        resp.raise_for_status()
+        _raise_for_status(resp)
         body = resp.json()
         return {
             "success": True,
@@ -261,7 +461,7 @@ class GoodMemClient:
             payload["metadata"] = metadata
 
         resp = await self._http.post("/v1/memories", json=payload)
-        resp.raise_for_status()
+        _raise_for_status(resp)
         data = resp.json()
         return {
             "success": True,
@@ -286,7 +486,17 @@ class GoodMemClient:
         llm_temperature: float | None = None,
         chronological_resort: bool = False,
     ) -> dict[str, Any]:
-        """Retrieve memories via semantic search."""
+        """Retrieve memories via semantic search.
+
+        Problems the server reports during retrieval (an unknown reranker or
+        LLM, a failed embedder, ...) are returned in ``statuses`` as
+        ``{code, message, details}`` with ``partial: True``.  Any hits the
+        server returned alongside them are kept, and an empty result with
+        ``partial: True`` is returned rather than raising.  Informational
+        notices (``FEATURE_DISABLED``, ``LLM_CAPABILITY_INFERRED``) are not
+        problems and are left out.  With *wait_for_indexing*, polling for
+        results stops as soon as the server reports a problem.
+        """
         space_keys = [{"spaceId": sid} for sid in space_ids if sid]
         if not space_keys:
             return {"success": False, "error": "At least one space must be provided."}
@@ -329,9 +539,9 @@ class GoodMemClient:
                 "Accept": "application/x-ndjson",
             }
             resp = await self._http.post("/v1/memories:retrieve", json=payload, headers=headers)
-            resp.raise_for_status()
+            _raise_for_status(resp)
 
-            results, memories, result_set_id, abstract_reply = self._parse_ndjson(resp.text)
+            results, memories, result_set_id, abstract_reply, statuses = self._parse_ndjson(resp.text)
 
             result: dict[str, Any] = {
                 "success": True,
@@ -340,9 +550,24 @@ class GoodMemClient:
                 "memories": memories,
                 "totalResults": len(results),
                 "query": query,
+                "partial": bool(statuses),
+                "statuses": statuses,
             }
             if abstract_reply:
                 result["abstractReply"] = abstract_reply
+
+            if statuses:
+                # The server said what went wrong; polling again cannot fix it.
+                if results:
+                    message = f"The server reported problems during retrieval; results may be incomplete: {_describe_statuses(statuses)}"
+                else:
+                    message = f"No results. The server reported problems during retrieval: {_describe_statuses(statuses)}"
+                # Decided after the whole stream is read: a failed reranker
+                # still returns the vector search's hits, scored on that scale.
+                if results and reranker_id and any(_is_reranker_failure(s) for s in statuses):
+                    message = message.rstrip(". ") + ". Reranking was not applied; relevanceScore values are vector-search scores."
+                result["message"] = message
+                return result
 
             if results or not should_wait:
                 return result
@@ -358,13 +583,13 @@ class GoodMemClient:
     async def get_memory(self, memory_id: str, *, include_content: bool = True) -> dict[str, Any]:
         """Fetch a single memory by ID."""
         resp = await self._http.get(f"/v1/memories/{memory_id}")
-        resp.raise_for_status()
+        _raise_for_status(resp)
         result: dict[str, Any] = {"success": True, "memory": resp.json()}
 
         if include_content:
             try:
                 content_resp = await self._http.get(f"/v1/memories/{memory_id}/content")
-                content_resp.raise_for_status()
+                _raise_for_status(content_resp)
                 # The content endpoint may return raw text or JSON depending on content type
                 try:
                     result["content"] = content_resp.json()
@@ -378,18 +603,26 @@ class GoodMemClient:
     async def delete_memory(self, memory_id: str) -> dict[str, Any]:
         """Delete a memory by ID."""
         resp = await self._http.delete(f"/v1/memories/{memory_id}")
-        resp.raise_for_status()
+        _raise_for_status(resp)
         return {"success": True, "memoryId": memory_id, "message": "Memory deleted successfully"}
 
     # -- Helpers ---------------------------------------------------------------
 
     @staticmethod
-    def _parse_ndjson(text: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]], str, dict[str, Any] | None]:
-        """Parse NDJSON / SSE response from the retrieve endpoint."""
+    def _parse_ndjson(
+        text: str,
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], str, dict[str, Any] | None, list[dict[str, Any]]]:
+        """Parse NDJSON / SSE response from the retrieve endpoint.
+
+        Returns ``(results, memories, result_set_id, abstract_reply, statuses)``
+        where *statuses* holds the problem statuses the server reported, in
+        stream order, normalized by :func:`_normalize_status`.
+        """
         results: list[dict[str, Any]] = []
         memories: list[dict[str, Any]] = []
         result_set_id = ""
         abstract_reply: dict[str, Any] | None = None
+        statuses: list[dict[str, Any]] = []
 
         for line in text.strip().split("\n"):
             json_str = line.strip()
@@ -403,8 +636,14 @@ class GoodMemClient:
                 item = json.loads(json_str)
             except json.JSONDecodeError:
                 continue
+            if not isinstance(item, dict):
+                continue
 
-            if "resultSetBoundary" in item:
+            if "status" in item:
+                status = _normalize_status(item["status"])
+                if status is not None:
+                    statuses.append(status)
+            elif "resultSetBoundary" in item:
                 result_set_id = item["resultSetBoundary"].get("resultSetId", "")
             elif "memoryDefinition" in item:
                 memories.append(item["memoryDefinition"])
@@ -421,4 +660,4 @@ class GoodMemClient:
                     "memoryIndex": chunk.get("memoryIndex"),
                 })
 
-        return results, memories, result_set_id, abstract_reply
+        return results, memories, result_set_id, abstract_reply, statuses

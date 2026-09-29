@@ -86,30 +86,24 @@ def create_goodmem_tools(client: GoodMemClient) -> list[Any]:
         description=(
             "Create a new GoodMem space or reuse an existing one. "
             "A space is a logical container for organizing related memories, "
-            "configured with an embedder that converts text to vector embeddings."
+            "configured with an embedder that converts text to vector embeddings. "
+            "An existing space with the same name is reused only if it uses the requested embedder; "
+            "otherwise an error names the existing space and both embedders, and nothing is created."
         ),
     )
     async def goodmem_create_space(
-        name: Annotated[str, Field(description="A unique name for the space. If a space with this name already exists, its ID will be returned instead of creating a duplicate.")],
-        embedder_id: Annotated[str, Field(description="The embedder ID that converts text into vector representations for similarity search. Use goodmem_list_embedders to find available IDs.")] = "",
+        name: Annotated[str, Field(description="A unique name for the space. If a space with this name already exists and uses the requested embedder (or no embedder is given), its ID is returned instead of creating a duplicate.")],
+        embedder_id: Annotated[str, Field(description="The embedder ID that converts text into vector representations for similarity search. Use goodmem_list_embedders to find available IDs. If omitted, an existing space with this name is reused whatever its embedder, and a new space uses the server's first embedder.")] = "",
         chunk_size: Annotated[int, Field(description="Number of characters per chunk when splitting documents.")] = 256,
         chunk_overlap: Annotated[int, Field(description="Number of overlapping characters between consecutive chunks.")] = 25,
         keep_strategy: Annotated[str, Field(description="Where to attach the separator when splitting: KEEP_END, KEEP_START, or DISCARD.")] = "KEEP_END",
         length_measurement: Annotated[str, Field(description="How chunk size is measured: CHARACTER_COUNT or TOKEN_COUNT.")] = "CHARACTER_COUNT",
     ) -> str:
         """Create a new GoodMem space or reuse an existing one."""
-        actual_embedder_id = embedder_id
-        if not actual_embedder_id:
-            embedders = await client.list_embedders()
-            if embedders:
-                actual_embedder_id = embedders[0].get("embedderId") or embedders[0].get("id", "")
-            if not actual_embedder_id:
-                return json.dumps({"success": False, "error": "No embedder_id provided and no embedders available on the server."})
-
         try:
             result = await client.create_space(
                 name=name,
-                embedder_id=actual_embedder_id,
+                embedder_id=embedder_id or None,
                 chunk_size=chunk_size,
                 chunk_overlap=chunk_overlap,
                 keep_strategy=keep_strategy,
@@ -245,7 +239,10 @@ def create_goodmem_tools(client: GoodMemClient) -> list[Any]:
         description=(
             "Perform similarity-based semantic retrieval across one or more "
             "GoodMem spaces. Returns matching chunks ranked by relevance. "
-            "Supports optional reranker and LLM post-processing."
+            "Supports optional reranker and LLM post-processing. "
+            "If the server reports a problem (for example an unknown reranker or LLM), "
+            "the result has partial=true and a statuses list saying what went wrong; "
+            "any results the server still returned are included."
         ),
     )
     async def goodmem_retrieve_memories(
@@ -253,7 +250,7 @@ def create_goodmem_tools(client: GoodMemClient) -> list[Any]:
         space_ids: Annotated[str, Field(description="Comma-separated list of space IDs to search across.")],
         max_results: Annotated[int, Field(description="Maximum number of results to return.")] = 5,
         include_memory_definition: Annotated[bool, Field(description="Include full memory metadata alongside matched chunks.")] = True,
-        wait_for_indexing: Annotated[bool, Field(description="Retry for up to 60 seconds when no results are found (useful for recently added memories).")] = True,
+        wait_for_indexing: Annotated[bool, Field(description="Retry for up to 60 seconds when no results are found (useful for recently added memories). Stops at once if the server reports a problem.")] = True,
         reranker_id: Annotated[str, Field(description="Optional UUID of a reranker model to improve result ordering.")] = "",
         llm_id: Annotated[str, Field(description="Optional UUID of an LLM to generate a contextual abstract reply.")] = "",
         relevance_threshold: Annotated[float, Field(description="Minimum relevance score (0-1) for including a result. 0 disables.")] = 0.0,
